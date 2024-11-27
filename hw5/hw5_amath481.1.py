@@ -48,7 +48,6 @@ offsets = [-(m-1), -1, 1, (m-1)]
 
 matC = spdiags(diagonals, offsets, n, n)/(2*dx)
 
-
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.fftpack import fft2, ifft2
@@ -117,7 +116,6 @@ def spc_rhs(t, w_flat):
 
     return compute_derivatives(psi_flat, w_flat)
 
-
 #AX = B LINEAR SOLVE
 def AB_rhs(t, w_flat):
     psi_flat = scipy.linalg.solve(matA, w_flat)
@@ -163,3 +161,146 @@ w_sol = sol.y
 A3 = w_sol
 
 
+
+
+def gaussian_vortex(X, Y, x0, y0, A, sigma_x, sigma_y):
+    return A * np.exp(-((X - x0)**2) / (2 * sigma_x**2) - ((Y - y0)**2) / (2 * sigma_y**2))
+
+# Parameters
+A = 1.0  
+sigma_x = 1.0  # Width in x
+sigma_y = 1.0  # Width in y
+d = 4.0  # Separation distance
+
+# Positions of the vortices
+x0, y0 = -d / 2, 0
+x1, y1 = d / 2, 0
+
+# Two Oppositely charged vortices
+w0_opposite = (gaussian_vortex(X, Y, x0, y0, A, sigma_x, sigma_y) +
+      gaussian_vortex(X, Y, x1, y1, -A, sigma_x, sigma_y))
+w0_opposite_flat = w0_opposite.reshape(N)
+
+# Two similarly charged vorticies
+w0_samesign = (gaussian_vortex(X, Y, x0, y0, A, sigma_x, sigma_y) +
+      gaussian_vortex(X, Y, x1, y1, A, sigma_x, sigma_y))
+w0_samesign_flat = w0_samesign.reshape(N)
+
+# Two pairs of oppositely “charged” vorticies made to collide with each other.
+vortices = [
+    {'x0': -d / 2, 'y0': -d / 2, 'A': -A},
+    {'x0': d / 2, 'y0': -d / 2, 'A': -A},
+    {'x0': -d / 2, 'y0': d / 2, 'A': A},
+    {'x0': d / 2, 'y0': d / 2, 'A': A},
+]
+w_pair = np.zeros_like(X)
+for vortex in vortices:
+    w_pair += gaussian_vortex(X, Y, vortex['x0'], vortex['y0'],
+                          vortex['A'], sigma_x, sigma_y)
+w_pair_flat = w_pair.reshape(N)
+
+
+# Assortment of random vortices
+num_vortices = 275
+w0_random_vorticities = np.zeros_like(X)
+
+import random
+for _ in range(num_vortices):
+    x0 = random.uniform(-Lx / 2, Lx / 2)
+    y0 = random.uniform(-Ly / 2, Ly / 2)
+    A = random.uniform(-1, 1)  # Random amplitude between -1 and 1
+    sigma_x = random.uniform(0.5, 1.5)
+    sigma_y = random.uniform(0.5, 1.5)
+    w0_random_vorticities += gaussian_vortex(X, Y, x0, y0, A, sigma_x, sigma_y)
+
+w0_random_vorticities_flat = w0_random_vorticities.reshape(N)
+
+import os
+import imageio
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
+
+def create_vorticity_animation(w0, tspan, nx, ny, Lx, Ly, output_filename='vorticity_animation.gif', 
+                             cmap='magma', frames_dir='vorticity_frames', frame_duration=0.1):
+
+    # Create directory for frames
+    if not os.path.exists(frames_dir):
+        os.makedirs(frames_dir)
+    
+    # Set up spatial grid
+    x = np.linspace(-Lx/2, Lx/2, nx)
+    y = np.linspace(-Ly/2, Ly/2, ny)
+    
+    # Solve the vorticity equation
+    tp = (tspan[0], tspan[-1])
+    w0_flat = w0.reshape(nx * ny)
+    sol = solve_ivp(spc_rhs, tp, w0_flat, t_eval=tspan, method='RK45')
+    w_sol = sol.y
+    
+    # Generate frames
+    for j, t in enumerate(tspan):
+        omega = w_sol[:, j].reshape((ny, nx))
+        
+        fig, ax = plt.subplots(figsize=(6, 5))
+        im = ax.pcolor(x, y, omega, shading='auto', cmap=cmap)
+        fig.colorbar(im, ax=ax, label='Vorticity')
+        ax.set_title(f'Vorticity at t = {t:.1f}')
+        ax.set_xlabel('x')
+        ax.set_ylabel('y')
+        ax.set_aspect('equal')
+        plt.tight_layout()
+        
+        frame_filename = os.path.join(frames_dir, f'frame_{j:04d}.png')
+        plt.savefig(frame_filename)
+        plt.close(fig)
+    
+    # Create animation
+    images = []
+    for j in range(len(tspan)):
+        frame_filename = os.path.join(frames_dir, f'frame_{j:04d}.png')
+        images.append(imageio.imread(frame_filename))
+    
+    # Save animation
+    imageio.mimsave(output_filename, images, duration=frame_duration)
+    
+    # Clean up frames
+    for j in range(len(tspan)):
+        os.remove(os.path.join(frames_dir, f'frame_{j:04d}.png'))
+    os.rmdir(frames_dir)
+    
+    return output_filename
+
+
+single_vorticity_file = create_vorticity_animation(w0, tspan, nx, ny, Lx, Ly, 
+                                                   output_filename='single_vorticity.gif')
+
+opposite_vorticities_file = create_vorticity_animation(w0_opposite, tspan, nx, ny, Lx, Ly, 
+                                                      output_filename='opposite_vorticities.gif')
+
+samesign_vorticies_file = create_vorticity_animation(w0_samesign, tspan, nx, ny, Lx, Ly, 
+                                                    output_filename='samesign_vorticities.gif')
+
+random_vorticites_file = create_vorticity_animation(w0_random_vorticities, tspan, nx, ny, Lx, Ly,
+                                                   output_filename='random_vorticities.gif')
+
+pair_vorticity_file = create_vorticity_animation(w_pair, tspan, nx, ny, Lx, Ly, 
+                                                   output_filename='pair_vorticities.gif')
+
+# Display all animations
+from IPython.display import Image, display
+
+print("Single Vortices Animation:")
+display(Image(filename='single_vorticities.gif'))
+
+print("Opposite Vortices Animation:")
+display(Image(filename='opposite_vorticities.gif'))
+
+print("\nSame-Sign Vortices Animation:")
+display(Image(filename='samesign_vorticities.gif'))
+
+print("Pair Vortices Animation:")
+display(Image(filename='pair_vorticities.gif'))
+
+print("\nRandom Vortices Animation:")
+display(Image(filename='random_vorticities.gif'))
