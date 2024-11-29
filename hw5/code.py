@@ -132,13 +132,13 @@ def LU_rhs(t, w_flat):
 #GMRES
 def gmres_rhs(t, w_flat):
     global psi0
-    psi_flat, info = gmres(matA, w_flat, x0=psi0, rtol=1e-6)
+    psi_flat, info = gmres(matA, w_flat, x0=psi0, rtol=1e-6, callback = gm_callback)
     psi0 = psi_flat  # Update psi0 for the next iteration
     return compute_derivatives(psi_flat, w_flat)
 
 #BICGSTAB
 def bicgstab_rhs(t, w_flat):
-    psi_flat = bicgstab(matA, w_flat)
+    psi_flat, info = bicgstab(matA, w_flat, tol=1e-6, callback = gm_callback)
     return compute_derivatives(psi_flat, w_flat)
 
 
@@ -160,6 +160,9 @@ A2 = w_sol
 sol = solve_ivp(LU_rhs, tp, w0_flat, t_eval = tspan, args=(), method='RK45')
 w_sol = sol.y
 A3 = w_sol
+
+def gm_callback(residual_norm):
+    residual_gm.append(residual_norm)
 
 
 start_time = time.time()
@@ -189,6 +192,8 @@ sol_gmres = solve_ivp(
 )
 end_time = time.time()
 elapsed_time_gmres = end_time - start_time
+print(len(residual_gm))
+residual_gm = []
 print(f"GMRES method elapsed time: {elapsed_time_gmres:.2f} seconds")
 
 # Timing and solving with BICGSTAB
@@ -198,6 +203,7 @@ sol_bicgstab = solve_ivp(
 )
 end_time = time.time()
 elapsed_time_bicgstab = end_time - start_time
+print(len(residual_gm))
 print(f"BICGSTAB method elapsed time: {elapsed_time_bicgstab:.2f} seconds")
 
 def gaussian_vortex(X, Y, x0, y0, A, sigma_x, sigma_y):
