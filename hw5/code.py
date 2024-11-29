@@ -130,9 +130,10 @@ def LU_rhs(t, w_flat):
     return compute_derivatives(psi_flat, w_flat)
 
 #GMRES
-def gmres_rhs(t, w_flat, psi0):
-    psi_flat = gmres(matA, w_flat, x0 = psi0, rtol = 1e-6)
-    psi0 = psi_flat
+def gmres_rhs(t, w_flat):
+    global psi0
+    psi_flat, info = gmres(matA, w_flat, x0=psi0, rtol=1e-6)
+    psi0 = psi_flat  # Update psi0 for the next iteration
     return compute_derivatives(psi_flat, w_flat)
 
 #BICGSTAB
@@ -161,7 +162,43 @@ w_sol = sol.y
 A3 = w_sol
 
 
+start_time = time.time()
+sol_fft = solve_ivp(spc_rhs, tp, w0_flat, t_eval=tspan, method='RK45', rtol=1e-6)
+end_time = time.time()
+elapsed_time_fft = end_time - start_time
+print(f"FFT method elapsed time: {elapsed_time_fft:.2f} seconds")
 
+# Timing and solving with Direct Solve (A\b)
+start_time = time.time()
+sol_direct = solve_ivp(AB_rhs, tp, w0_flat, t_eval=tspan, method='RK45', rtol=1e-6)
+end_time = time.time()
+elapsed_time_direct = end_time - start_time
+print(f"Direct Solve method elapsed time: {elapsed_time_direct:.2f} seconds")
+
+# Timing and solving with LU decomposition
+start_time = time.time()
+sol_lu = solve_ivp(LU_rhs, tp, w0_flat, t_eval=tspan, method='RK45', rtol=1e-6)
+end_time = time.time()
+elapsed_time_lu = end_time - start_time
+print(f"LU decomposition method elapsed time: {elapsed_time_lu:.2f} seconds")
+
+# Timing and solving with GMRES
+start_time = time.time()
+sol_gmres = solve_ivp(
+    gmres_rhs, tp, w0_flat, t_eval=tspan, method='RK45', rtol=1e-6, atol=1e-8
+)
+end_time = time.time()
+elapsed_time_gmres = end_time - start_time
+print(f"GMRES method elapsed time: {elapsed_time_gmres:.2f} seconds")
+
+# Timing and solving with BICGSTAB
+start_time = time.time()
+sol_bicgstab = solve_ivp(
+    bicgstab_rhs, tp, w0_flat, t_eval=tspan, method='RK45', rtol=1e-6, atol=1e-8
+)
+end_time = time.time()
+elapsed_time_bicgstab = end_time - start_time
+print(f"BICGSTAB method elapsed time: {elapsed_time_bicgstab:.2f} seconds")
 
 def gaussian_vortex(X, Y, x0, y0, A, sigma_x, sigma_y):
     return A * np.exp(-((X - x0)**2) / (2 * sigma_x**2) - ((Y - y0)**2) / (2 * sigma_y**2))
